@@ -21,6 +21,8 @@ type SettingsViewModel struct {
 	ApiKeys               []*SettingsApiKeys
 	WebAuthnCredentials   []*models.WebAuthnCredential
 	DisableWebAuthn       bool
+	Shares                []*SettingsShare
+	SharesEnabled         bool
 }
 
 type SettingsVMCombinedAlias struct {
@@ -38,6 +40,17 @@ type SettingsApiKeys struct {
 	Name     string
 	Value    string
 	ReadOnly bool
+}
+
+type SettingsShare struct {
+	ID        string
+	Title     string
+	ChartType string
+	Interval  string
+	Theme     string
+	SvgUrl    string
+	JsonUrl   string
+	Embed     string
 }
 
 func (s *SettingsViewModel) SubscriptionsEnabled() bool {

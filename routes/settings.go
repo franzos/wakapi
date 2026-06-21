@@ -44,6 +44,7 @@ type SettingsHandler struct {
 	keyValueSrvc        services.IKeyValueService
 	mailSrvc            services.IMailService
 	apiKeySrvc          services.IApiKeyService
+	shareSrvc           services.IShareService
 	WebAuthnSrvc        services.IWebAuthnService
 	httpClient          *http.Client
 	aggregationLocks    map[string]bool
@@ -60,6 +61,8 @@ type actionResult struct {
 
 const valueInviteCode = "invite_code"
 
+const maxSharesPerUser = 25
+
 var credentialsDecoder = schema.NewDecoder()
 
 func NewSettingsHandler(
@@ -75,6 +78,7 @@ func NewSettingsHandler(
 	mailService services.IMailService,
 	apiKeyService services.IApiKeyService,
 	webAuthnService services.IWebAuthnService,
+	shareService services.IShareService,
 ) *SettingsHandler {
 	return &SettingsHandler{
 		config:              conf.Get(),
@@ -89,6 +93,7 @@ func NewSettingsHandler(
 		keyValueSrvc:        keyValueService,
 		mailSrvc:            mailService,
 		apiKeySrvc:          apiKeyService,
+		shareSrvc:           shareService,
 		WebAuthnSrvc:        webAuthnService,
 		httpClient:          &http.Client{Timeout: 10 * time.Second},
 		aggregationLocks:    make(map[string]bool),
@@ -212,6 +217,10 @@ func (h *SettingsHandler) dispatchAction(action string) action {
 		return h.actionAddApiKey
 	case "delete_api_key":
 		return h.actionDeleteApiKey
+	case "add_share":
+		return h.actionAddShare
+	case "delete_share":
+		return h.actionDeleteShare
 	case "webauthn_add":
 		return h.actionWebAuthnAdd
 	case "webauthn_delete":
@@ -999,6 +1008,70 @@ func (h *SettingsHandler) actionDeleteApiKey(w http.ResponseWriter, r *http.Requ
 	return actionResult{http.StatusNotFound, "", "API key not found", nil}
 }
 
+func (h *SettingsHandler) actionAddShare(w http.ResponseWriter, r *http.Request) actionResult {
+	if h.config.IsDev() {
+		loadTemplates()
+	}
+
+	if !h.config.App.SharesEnabled {
+		return actionResult{http.StatusForbidden, "", "embeddable charts are disabled on this server", nil}
+	}
+
+	user := middlewares.GetPrincipal(r)
+
+	if existing, err := h.shareSrvc.GetByUser(user.ID); err == nil && len(existing) >= maxSharesPerUser {
+		return actionResult{http.StatusBadRequest, "", "embeddable chart limit reached", nil}
+	}
+
+	theme := r.PostFormValue("theme")
+	if theme == "" {
+		theme = "light"
+	}
+
+	share := &models.Share{
+		ID:        uuid.Must(uuid.NewV4()).String(),
+		User:      user,
+		UserID:    user.ID,
+		ChartType: r.PostFormValue("chart_type"),
+		Interval:  r.PostFormValue("interval"),
+		Theme:     theme,
+	}
+
+	if !share.IsValid() {
+		return actionResult{http.StatusBadRequest, "", "invalid chart type, range or theme", nil}
+	}
+
+	if _, err := h.shareSrvc.Create(share); err != nil {
+		return actionResult{http.StatusInternalServerError, "", conf.ErrInternalServerError, nil}
+	}
+
+	return actionResult{http.StatusOK, "embeddable chart created", "", nil}
+}
+
+func (h *SettingsHandler) actionDeleteShare(w http.ResponseWriter, r *http.Request) actionResult {
+	if h.config.IsDev() {
+		loadTemplates()
+	}
+
+	user := middlewares.GetPrincipal(r)
+	shareId := r.PostFormValue("share_id")
+
+	shares, err := h.shareSrvc.GetByUser(user.ID)
+	if err != nil {
+		return actionResult{http.StatusInternalServerError, "", "could not delete embeddable chart", nil}
+	}
+
+	for _, s := range shares {
+		if s.ID == shareId {
+			if err := h.shareSrvc.Delete(s); err != nil {
+				return actionResult{http.StatusInternalServerError, "", "could not delete embeddable chart", nil}
+			}
+			return actionResult{http.StatusOK, "embeddable chart deleted", "", nil}
+		}
+	}
+	return actionResult{http.StatusNotFound, "", "embeddable chart not found", nil}
+}
+
 func (h *SettingsHandler) actionWebAuthnAdd(w http.ResponseWriter, r *http.Request) actionResult {
 	if h.config.IsDev() {
 		loadTemplates()
@@ -1076,6 +1149,29 @@ func (h *SettingsHandler) actionWebAuthnDelete(w http.ResponseWriter, r *http.Re
 		return actionResult{http.StatusInternalServerError, "", "could not delete webauthn credential", nil}
 	}
 	return actionResult{http.StatusOK, "webauthn authenticator deleted successfully", "", nil}
+}
+
+var shareChartTypeLabels = map[string]string{
+	models.ShareChartActivity:   "Coding Activity",
+	models.ShareChartLanguages:  "Languages",
+	models.ShareChartEditors:    "Editors",
+	models.ShareChartOS:         "Operating Systems",
+	models.ShareChartCategories: "Categories",
+}
+
+var shareIntervalLabels = map[string]string{
+	"last_7_days":  "Last 7 Days",
+	"last_30_days": "Last 30 Days",
+	"last_year":    "Last Year",
+	"all_time":     "All Time",
+}
+
+func prettyShareTitle(s *models.Share) string {
+	theme := "Light"
+	if s.Theme == "dark" {
+		theme = "Dark"
+	}
+	return fmt.Sprintf("%s · %s · %s", shareChartTypeLabels[s.ChartType], shareIntervalLabels[s.Interval], theme)
 }
 
 func (h *SettingsHandler) buildViewModel(r *http.Request, w http.ResponseWriter, args *map[string]interface{}) *view.SettingsViewModel {
@@ -1222,6 +1318,36 @@ func (h *SettingsHandler) buildViewModel(r *http.Request, w http.ResponseWriter,
 		readmeCardTitle += fmt.Sprintf(" (%v)", maxRange.GetHumanReadable())
 	}
 
+	// embeddable chart shares
+	combinedShares := make([]*view.SettingsShare, 0)
+	if h.config.App.SharesEnabled {
+		shares, err := h.shareSrvc.GetByUser(user.ID)
+		if err != nil {
+			conf.Log().Request(r).Error("error while fetching user's shares", "user", user.ID, "error", err)
+			return &view.SettingsViewModel{
+				SharedLoggedInViewModel: view.SharedLoggedInViewModel{
+					SharedViewModel: view.NewSharedViewModel(h.config, &view.Messages{Error: criticalError}),
+					User:            user,
+				},
+			}
+		}
+		baseUrl := fmt.Sprintf("%s/share/@%s", h.config.Server.GetPublicUrl(), user.ID)
+		for _, s := range shares {
+			svgUrl := fmt.Sprintf("%s/%s.svg", baseUrl, s.ID)
+			jsonUrl := fmt.Sprintf("%s/%s.json", baseUrl, s.ID)
+			combinedShares = append(combinedShares, &view.SettingsShare{
+				ID:        s.ID,
+				Title:     prettyShareTitle(s),
+				ChartType: s.ChartType,
+				Interval:  s.Interval,
+				Theme:     s.Theme,
+				SvgUrl:    svgUrl,
+				JsonUrl:   jsonUrl,
+				Embed:     fmt.Sprintf(`<a href="%s/@%s"><img src="%s" alt="Wakapi stats" /></a>`, h.config.Server.GetPublicUrl(), user.ID, svgUrl),
+			})
+		}
+	}
+
 	vm := &view.SettingsViewModel{
 		SharedLoggedInViewModel: view.SharedLoggedInViewModel{
 			SharedViewModel: view.NewSharedViewModel(h.config, nil),
@@ -1240,6 +1366,8 @@ func (h *SettingsHandler) buildViewModel(r *http.Request, w http.ResponseWriter,
 		WebAuthnCredentials:   user.Credentials,
 		ReadmeCardCustomTitle: readmeCardTitle,
 		DisableWebAuthn:       h.config.Security.DisableWebAuthn,
+		Shares:                combinedShares,
+		SharesEnabled:         h.config.App.SharesEnabled,
 	}
 
 	return routeutils.WithSessionMessages(vm, r, w)

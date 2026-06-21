@@ -156,6 +156,14 @@ type IApiKeyRepository interface {
 	Delete(string) error
 }
 
+type IShareRepository interface {
+	IBaseRepository
+	GetById(string) (*models.Share, error)
+	GetByUser(string) ([]*models.Share, error)
+	Insert(*models.Share) (*models.Share, error)
+	Delete(string) error
+}
+
 type IWebAuthnRepository interface {
 	IBaseRepository
 	Insert(*models.WebAuthnCredential) (*models.WebAuthnCredential, error)

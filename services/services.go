@@ -190,6 +190,18 @@ type IApiKeyService interface {
 	Delete(*models.ApiKey) error
 }
 
+type IShareService interface {
+	GetById(string) (*models.Share, error)
+	GetByUser(string) ([]*models.Share, error)
+	Create(*models.Share) (*models.Share, error)
+	Delete(*models.Share) error
+}
+
+type IChartService interface {
+	RenderChart(*models.User, string, *models.IntervalKey, bool, bool) (string, error)
+	ActivitySeries(*models.User, time.Time, time.Time) ([]ActivityPoint, error)
+}
+
 type IWebAuthnService interface {
 	CreateCredential(*webauthn.Credential, *models.User, string) (*models.WebAuthnCredential, error)
 	GetCredentialsByUser(*models.User) ([]*models.WebAuthnCredential, error)

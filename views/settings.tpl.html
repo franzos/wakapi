@@ -903,6 +903,63 @@
                     </div>
                 </div>
             </div>
+
+            {{ if .SharesEnabled }}
+            <div class="w-full lg:w-3/4">
+                <hr class="border-t border-focused mb-4">
+            </div>
+
+            <div class="w-full lg:w-3/4">
+                <div class="mb-4">
+                    <label class="font-semibold text-foreground text-lg">Embeddable Charts</label>
+                    <span class="block text-sm text-muted">
+                        Create public, revocable charts to embed in a README or website. Each chart has its own URL — delete it any time to revoke access. SVG is for <code>&lt;img&gt;</code> embeds; JSON returns the raw stats.
+                    </span>
+                </div>
+
+                <form action="" method="post" class="flex flex-wrap items-center gap-2 mb-8">
+                    <input type="hidden" name="action" value="add_share">
+                    <select autocomplete="off" name="chart_type" class="appearance-none bg-card focus:bg-focused text-foreground outline-none rounded py-2 px-4 cursor-pointer" required>
+                        <option value="activity">Coding Activity</option>
+                        <option value="languages">Languages</option>
+                        <option value="editors">Editors</option>
+                        <option value="operating_systems">Operating Systems</option>
+                        <option value="categories">Categories</option>
+                    </select>
+                    <select autocomplete="off" name="interval" class="appearance-none bg-card focus:bg-focused text-foreground outline-none rounded py-2 px-4 cursor-pointer" required>
+                        <option value="last_7_days">Last 7 Days</option>
+                        <option value="last_30_days">Last 30 Days</option>
+                        <option value="last_year">Last Year</option>
+                        <option value="all_time">All Time</option>
+                    </select>
+                    <select autocomplete="off" name="theme" class="appearance-none bg-card focus:bg-focused text-foreground outline-none rounded py-2 px-4 cursor-pointer">
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                    </select>
+                    <button type="submit" class="btn-primary">Add</button>
+                </form>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {{ range $i, $Share := .Shares }}
+                    <div class="bg-card rounded p-4 flex flex-col gap-y-2">
+                        <div class="flex items-center justify-between gap-x-2">
+                            <span class="text-sm font-semibold text-foreground">{{ $Share.Title }}</span>
+                            <form action="" method="post" class="inline shrink-0">
+                                <input type="hidden" name="action" value="delete_share">
+                                <input type="hidden" name="share_id" value="{{ $Share.ID }}">
+                                <button type="submit" class="py-1 px-2 rounded bg-focused hover:bg-default text-danger text-sm" title="Delete embeddable chart">✕</button>
+                            </form>
+                        </div>
+                        <img src="{{ $Share.SvgUrl }}" class="max-w-full rounded" alt="Embeddable chart">
+                        <div class="font-mono text-xs bg-focused text-secondary rounded py-2 px-4" style="word-break: break-all;">{{ $Share.Embed }}</div>
+                        <div class="text-xs">
+                            <a href="{{ $Share.SvgUrl }}" target="_blank" class="link">SVG</a> · <a href="{{ $Share.JsonUrl }}" target="_blank" class="link">JSON</a>
+                        </div>
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+            {{ end }}
         </div>
 
         {{ if .SubscriptionsEnabled }}

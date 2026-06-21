@@ -67,6 +67,7 @@ var (
 	metricsRepository         *repositories.MetricsRepository
 	durationRepository        *repositories.DurationRepository
 	apiKeyRepository          repositories.IApiKeyRepository
+	shareRepository           repositories.IShareRepository
 	webAuthnRepository        repositories.IWebAuthnRepository
 )
 
@@ -89,6 +90,8 @@ var (
 	housekeepingService    services.IHousekeepingService
 	miscService            services.IMiscService
 	apiKeyService          services.IApiKeyService
+	shareService           services.IShareService
+	chartService           services.IChartService
 	webAuthnService        services.IWebAuthnService
 )
 
@@ -180,6 +183,7 @@ func main() {
 	metricsRepository = repositories.NewMetricsRepository(db)
 	durationRepository = repositories.NewDurationRepository(db)
 	apiKeyRepository = repositories.NewApiKeyRepository(db)
+	shareRepository = repositories.NewShareRepository(db)
 	webAuthnRepository = repositories.NewWebAuthnRepository(db)
 
 	// Services
@@ -197,6 +201,8 @@ func main() {
 	aggregationService = services.NewAggregationService(userService, summaryService, heartbeatService, durationService)
 	reportService = services.NewReportService(summaryService, userService, mailService)
 	activityService = services.NewActivityService(summaryService)
+	shareService = services.NewShareService(shareRepository)
+	chartService = services.NewChartService(summaryService)
 	diagnosticsService = services.NewDiagnosticsService(diagnosticsRepository)
 	housekeepingService = services.NewHousekeepingService(userService, heartbeatService, projectService, summaryService, aliasRepository) // can pass any repo here
 	miscService = services.NewMiscService(userService, heartbeatService, summaryService, keyValueService, mailService)
@@ -245,7 +251,7 @@ func main() {
 
 	// MVC Handlers
 	summaryHandler := routes.NewSummaryHandler(summaryService, userService, heartbeatService, durationService, aliasService)
-	settingsHandler := routes.NewSettingsHandler(userService, heartbeatService, durationService, summaryService, aliasService, aggregationService, languageMappingService, projectLabelService, keyValueService, mailService, apiKeyService, webAuthnService)
+	settingsHandler := routes.NewSettingsHandler(userService, heartbeatService, durationService, summaryService, aliasService, aggregationService, languageMappingService, projectLabelService, keyValueService, mailService, apiKeyService, webAuthnService, shareService)
 	subscriptionHandler := routes.NewSubscriptionHandler(userService, mailService, keyValueService)
 	projectsHandler := routes.NewProjectsHandler(userService, heartbeatService, projectService)
 	homeHandler := routes.NewHomeHandler(userService, keyValueService)
@@ -254,6 +260,7 @@ func main() {
 	setupHandler := routes.NewSetupHandler(userService)
 	leaderboardHandler := condition.Ternary[bool, routes.Handler](config.App.LeaderboardEnabled, routes.NewLeaderboardHandler(userService, leaderboardService), routes.NewNoopHandler())
 	miscHandler := routes.NewMiscHandler(userService)
+	shareHandler := condition.Ternary[bool, routes.Handler](config.App.SharesEnabled, routes.NewShareHandler(userService, shareService, summaryService, chartService), routes.NewNoopHandler())
 
 	// Setup Routing
 	router := chi.NewRouter()
@@ -296,6 +303,7 @@ func main() {
 	settingsHandler.RegisterRoutes(rootRouter)
 	subscriptionHandler.RegisterRoutes(rootRouter)
 	miscHandler.RegisterRoutes(rootRouter)
+	shareHandler.RegisterRoutes(rootRouter)
 
 	// API route registrations
 	rootApiHandler.RegisterRoutes(apiRouter)

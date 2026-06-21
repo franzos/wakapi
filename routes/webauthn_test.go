@@ -37,6 +37,7 @@ type WebAuthnTestSuite struct {
 	ApiKeyService          *mocks.MockApiKeyService
 	HeartbeatService       *mocks.HeartbeatServiceMock
 	LanguageMappingService *mocks.LanguageMappingServiceMock
+	ShareService           *mocks.ShareServiceMock
 	UserNonLocal           *models.User
 	UserA                  *models.User
 	UserB                  *models.User
@@ -67,7 +68,8 @@ func (suite *WebAuthnTestSuite) BeforeTest(suiteName, testName string) {
 	suite.ProjectLabelService = new(mocks.ProjectLabelServiceMock)
 	suite.ApiKeyService = new(mocks.MockApiKeyService)
 	suite.LanguageMappingService = new(mocks.LanguageMappingServiceMock)
-	suite.SettingsHandler = NewSettingsHandler(suite.UserService, suite.HeartbeatService, nil, nil, suite.AliasService, nil, suite.LanguageMappingService, suite.ProjectLabelService, nil, nil, suite.ApiKeyService, suite.WebauthnService)
+	suite.ShareService = new(mocks.ShareServiceMock)
+	suite.SettingsHandler = NewSettingsHandler(suite.UserService, suite.HeartbeatService, nil, nil, suite.AliasService, nil, suite.LanguageMappingService, suite.ProjectLabelService, nil, nil, suite.ApiKeyService, suite.WebauthnService, suite.ShareService)
 	suite.LoginHandler = NewLoginHandler(suite.UserService, nil, nil, suite.WebauthnService)
 	Init() // load templates
 
@@ -96,6 +98,7 @@ func (suite *WebAuthnTestSuite) mockSettingsViewDefaults() {
 	suite.HeartbeatService.On("GetEntitySetByUser", mock.Anything, mock.Anything).Return([]string{}, nil).Maybe()
 	suite.HeartbeatService.On("GetFirstByUser", mock.Anything).Return(time.Time{}, nil).Maybe()
 	suite.ApiKeyService.On("GetByUser", mock.Anything).Return([]*models.ApiKey{}, nil).Maybe()
+	suite.ShareService.On("GetByUser", mock.Anything).Return([]*models.Share{}, nil).Maybe()
 	suite.WebauthnService.On("LoadCredentialIntoUser", mock.Anything).Return(nil).Maybe()
 	suite.UserService.On("Count").Return(1, nil).Maybe()
 }
