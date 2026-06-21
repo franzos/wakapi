@@ -8,6 +8,8 @@ on:
 jobs:
   release:
     name: 'Build, package and release to GitHub'
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
