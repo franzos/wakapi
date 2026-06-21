@@ -9,6 +9,9 @@ jobs:
   docker-publish:
     name: 'Build and publish Docker image'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -25,12 +28,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -38,19 +35,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # fork tags look like "wakapi-v2.17.4-fork.1"; strip the prefix to a semver value
+      - name: Extract semver from fork tag
+        id: semver
+        env:
+          INPUT_TAG: ${{ github.event.release.tag_name }}
+        run: echo "version=$(echo "$INPUT_TAG" | sed -E 's/wakapi-v//')" >> "$GITHUB_OUTPUT"
+
       - name: Docker Metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ghcr.io/${{ github.repository }}
-            n1try/wakapi
+          images: ghcr.io/${{ github.repository }}
           tags: |
-            latest
-            alpine
-            type=semver,pattern={{major}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{version}}
+            type=raw,value=latest
+            type=semver,pattern={{version}},value=${{ steps.semver.outputs.version }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -60,3 +59,4 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
